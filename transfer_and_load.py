@@ -9,7 +9,10 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.types import *
 import pandas.io.sql as sqlio
 
+postgres_connection_string = "postgresql://dap:dap@127.0.0.1:5432/dap"
 
+my_dict = {'AL':'Alabama', 'AK':'Alaska', 'AZ':	'Arizona', 'AR': 'Arkansas', 'CA' : 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware','DC': 'District of Columbia', 'FL': 'Florida','GA': 'Georgia', 'HI': 'Hawaii','ID': 'Idaho','IL':'Illinois', 'IN': 'Indiana','IA': 'Iowa', 'KS':'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana','ME':'Maine', 'MD':'Maryland', 'MA': 'Massachusetts', 'MI': 'Michigan','MN':'Minnesota', 'MS': 'Mississippi', 'MO':'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada','NH': 'New Hampshire','NJ': 'New Jersey', 'NM': 'New Mexico','NY': 'New York', 'NC': 'North Carolina','ND': 'North Dakota', 'OH':'Ohio','OK': 'Oklahoma','OR':'Oregon','PA': 'Pennsylvania', 'RI':'Rhode Island', 'SC': 'South Carolina','SD': 'South Dakota', 'TN': 'Tennessee','TX':'Texas','UT': 'Utah','VT': 'Vermont','VA': 'Virginia','WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming', 'PR': 'Puerto Rico', 'VI': 'Virgin Islands', 'GU': 'Guam', 'AS': 'American Samoa', 'MP' : 'Northern Marianas'}
+engine = create_engine(postgres_connection_string)
 logger = get_dagster_logger()
 
 CostOfLivivngDataFrame = create_dagster_pandas_dataframe_type(
@@ -77,11 +80,32 @@ CostOfLivivngDataFrame = create_dagster_pandas_dataframe_type(
 
 @op(
     ins={"start": In(bool)},
-    out=Out([])
+    out=Out(CostOfLivivngDataFrame)
 )
 
 def transform_cost_of_living(start):
-    return []
+    # Connect to the Cassandra database
+    cassandra = Cluster(["127.0.0.1"])
+    # Connect to the weather keyspace
+    cassandra_session = cassandra.connect("cost_of_living")
+    # Retrieve all rows in the weather table
+    cost_of_living_df = pd.DataFrame(list(
+        cassandra_session.execute("SELECT * FROM cost_of_living;")
+    ))
+    # print()
+    keys = my_dict.keys()
+    key_list = list(keys)
+
+    for key in key_list:
+        cost_of_living_df['state'] = cost_of_living_df['state'].replace(key, my_dict[key])
+
+    cost_of_living_df['county'] = cost_of_living_df['county'].str.split('_', expand=True)[0]
+    cost_of_living_df['area_name'] = cost_of_living_df['area_name'].str.split('_', expand=True)[0]
+    cost_of_living_df['median_family_income'] = cost_of_living_df['median_family_income'].fillna(0)
+    cost_of_living_df = cost_of_living_df.drop_duplicates(subset=['county'], keep='first')
+    # cost_of_living_df.to_excel("cost_of_living_df.xlsx") 
+    cost_of_living_df.to_sql('cost_of_living_structured', engine, if_exists='replace', index=False)
+    return(cost_of_living_df)
 
 @op(
     ins={"start": In(bool)},
