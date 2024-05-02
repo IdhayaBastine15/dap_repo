@@ -22,7 +22,23 @@ def extract_unemployment() -> bool:
 )
 
 def extract_quality_of_life() -> bool:
-    return []
+    result = True
+    try:
+        # Connect to the MongoDB database
+        client = MongoClient(mongo_connection_string)
+        
+        # Connect to the unemployment database
+        unemployment_db = client["unemployment"]
+        
+        # Connect to the unemployment collection
+        unemployment_collection = unemployment_db["unemployment"]
+    
+    except Exception as err:
+        logger.error("Error: %s" % err)
+        result = False
+    
+    # Return a Boolean indicating success or failure
+    return result
 
 
 @op(
